@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11819.183
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DuoController", "DuoController\DuoController.vcxproj", "{3DED9EDB-14C3-44DB-B755-22BAA80D576F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DuoControllerSample", "DuoControllerSample\DuoControllerSample.vcxproj", "{8F4CE1E7-6C43-457A-96AD-2F723D11DE3A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F} = {3DED9EDB-14C3-44DB-B755-22BAA80D576F}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Debug|x64.ActiveCfg = Debug|x64
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Debug|x64.Build.0 = Debug|x64
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Debug|x64.Deploy.0 = Debug|x64
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Release|x64.ActiveCfg = Release|x64
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Release|x64.Build.0 = Release|x64
+		{3DED9EDB-14C3-44DB-B755-22BAA80D576F}.Release|x64.Deploy.0 = Release|x64
+		{8F4CE1E7-6C43-457A-96AD-2F723D11DE3A}.Debug|x64.ActiveCfg = Debug|x64
+		{8F4CE1E7-6C43-457A-96AD-2F723D11DE3A}.Debug|x64.Build.0 = Debug|x64
+		{8F4CE1E7-6C43-457A-96AD-2F723D11DE3A}.Release|x64.ActiveCfg = Release|x64
+		{8F4CE1E7-6C43-457A-96AD-2F723D11DE3A}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6807D5E1-FF3F-4795-8B30-9404B0F63E84}
+	EndGlobalSection
+EndGlobal

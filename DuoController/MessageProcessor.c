@@ -1,0 +1,39 @@
+// Copyright 2026 Black-Seraph
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "Driver.h"
+#include "MessageProcessor.tmh"
+
+/// <summary>
+/// Initializes a DS4 input report buffer with default neutral values, including
+/// report ID 1, centered sticks, neutral triggers, and zeroed IMU data.
+/// </summary>
+/// <param name="Report">Output buffer to receive the default DS4 report. Must be at least DS4_REPORT_SIZE bytes.</param>
+VOID SetDefaultDs4Report(_Out_ PUCHAR Report)
+{
+	// Initialize a default DS4 input report (Report ID 1) with neutral values
+	UCHAR DefaultReport[DS4_REPORT_SIZE] =
+	{
+		0x01, 0x82, 0x7F, 0x7E, 0x80, 0x08, 0x00, 0x58,
+		0x00, 0x00, 0xFD, 0x63, 0x06, 0x03, 0x00, 0xFE,
+		0xFF, 0xFC, 0xFF, 0x79, 0xFD, 0x1B, 0x14, 0xD1,
+		0xE9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1B, 0x00,
+		0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80,
+		0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+		0x80, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00,
+		0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00
+	};
+
+	memcpy(Report, DefaultReport, DS4_REPORT_SIZE);
+}

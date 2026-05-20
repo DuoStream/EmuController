@@ -1,0 +1,9 @@
+LIBRARY "DuoController"
+EXPORTS
+DuoController_Initialize
+DuoController_Uninitialize
+DuoController_CreateController
+DuoController_RemoveController
+DuoController_SendReport
+DuoController_SendReportDs4
+DriverEntry
