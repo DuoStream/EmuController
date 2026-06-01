@@ -26,7 +26,7 @@ NTSTATUS GetInputReport(_In_ PQUEUE_CONTEXT QueueContext, _In_ WDFREQUEST Reques
 
 NTSTATUS SetOutputReport(_In_ PQUEUE_CONTEXT QueueContext, _In_ WDFREQUEST Request);
 
-NTSTATUS GetString(_In_ WDFREQUEST Request);
+NTSTATUS GetString(_In_ WDFREQUEST Request, _In_ PDEVICE_CONTEXT DeviceContext);
 
 NTSTATUS GetIndexedString(_In_ WDFREQUEST Request);
 

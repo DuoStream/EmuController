@@ -218,7 +218,7 @@ VOID DuoControllerEvtIoDeviceControl(_In_ WDFQUEUE Queue, _In_ WDFREQUEST Reques
 
 	case IOCTL_HID_GET_STRING:                      // METHOD_NEITHER
 
-		status = GetString(Request);
+		status = GetString(Request, deviceContext);
 		break;
 
 	case IOCTL_HID_GET_INDEXED_STRING:              // METHOD_OUT_DIRECT

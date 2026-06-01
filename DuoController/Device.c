@@ -359,6 +359,20 @@ NTSTATUS DuoControllerCreateDevice(_Inout_ PWDFDEVICE_INIT DeviceInit)
 
 			wcscpy_s(deviceContext->DeviceInstanceId, MAX_DEVICE_INSTANCE_ID_LEN, deviceInstanceId);
 
+			// Generate a unique serial number from the device instance ID.
+			// Instance ID format: ROOT\VID_054C&PID_05C4&DUOCONTROLLER\0000
+			// We use the suffix after the last backslash for uniqueness.
+			WCHAR* serialStart = wcsrchr(deviceInstanceId, L'\\');
+			if (serialStart != NULL)
+			{
+				serialStart++;
+				wcscpy_s(deviceContext->SerialNumber, HID_DEVICE_SERIAL_NUMBER_MAX_LEN, serialStart);
+			}
+			else
+			{
+				wcscpy_s(deviceContext->SerialNumber, HID_DEVICE_SERIAL_NUMBER_MAX_LEN, deviceInstanceId);
+			}
+
 			WdfObjectDelete(deviceInstanceIdMemory);
 
 			TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DEVICE, "Device instance ID: %ws", deviceContext->DeviceInstanceId);

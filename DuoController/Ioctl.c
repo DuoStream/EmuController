@@ -571,8 +571,9 @@ NTSTATUS GetIndexedString(_In_ WDFREQUEST Request)
 /// Handles IOCTL_HID_GET_STRING for the HID collection.
 /// </summary>
 /// <param name="Request">Pointer to the request packet.</param>
+/// <param name="DeviceContext">Pointer to the device context.</param>
 /// <returns>NTSTATUS</returns>
-NTSTATUS GetString(_In_ WDFREQUEST Request)
+NTSTATUS GetString(_In_ WDFREQUEST Request, _In_ PDEVICE_CONTEXT DeviceContext)
 {
 	NTSTATUS status;
 	ULONG languageId, stringId;
@@ -600,8 +601,8 @@ NTSTATUS GetString(_In_ WDFREQUEST Request)
 		string = HID_DEVICE_PRODUCT_STRING;
 		break;
 	case HID_STRING_ID_ISERIALNUMBER:
-		stringSizeCb = sizeof(HID_DEVICE_SERIAL_NUMBER_STRING);
-		string = HID_DEVICE_SERIAL_NUMBER_STRING;
+		stringSizeCb = wcslen(DeviceContext->SerialNumber) * sizeof(WCHAR) + sizeof(WCHAR);
+		string = DeviceContext->SerialNumber;
 		break;
 	default:
 		status = STATUS_INVALID_PARAMETER;

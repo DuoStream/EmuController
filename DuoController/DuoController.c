@@ -679,7 +679,7 @@ static HRESULT InstallDuoControllerDevice(WCHAR* instanceId, DWORD instanceIdSiz
 
 		// Install/update the driver for the device
 		BOOL rebootRequired = FALSE;
-		if (!UpdateDriverForPlugAndPlayDevicesW(NULL, hardwareId, fullInfPath, INSTALLFLAG_FORCE, &rebootRequired))
+		if (!UpdateDriverForPlugAndPlayDevicesW(NULL, hardwareId, fullInfPath, 0, &rebootRequired))
 		{
 			result = HRESULT_FROM_WIN32(GetLastError());
 			SetupDiDestroyDeviceInfoList(hDevInfo);
