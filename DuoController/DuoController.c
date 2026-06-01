@@ -632,14 +632,24 @@ static HRESULT InstallDuoControllerDevice(WCHAR* instanceId, DWORD instanceIdSiz
 	// Whether a reboot is required or not
 	BOOL rebootRequired = FALSE;
 
-	// TODO: Check if the driver is already installed and skip installation if it is
-
-	// Install the driver into the driver store
-	if (!DiInstallDriverW(NULL, fullInfPath, DIIRFLAG_FORCE_INF, &rebootRequired))
+	// Check if the driver is already installed in the driver store
+	BOOL driverInStore = FALSE;
+	if (!SetupCopyOEMInfW(fullInfPath, NULL, SPOST_NONE, SP_COPY_NOOVERWRITE, NULL, 0, NULL, NULL) && GetLastError() == ERROR_FILE_EXISTS)
 	{
-		result = HRESULT_FROM_WIN32(GetLastError());
-		SetupDiDestroyDeviceInfoList(hDevInfo);
-		return result;
+		// The driver is already installed in the driver store
+		driverInStore = TRUE;
+	}
+
+	// The driver hasn't been installed into the driver store yet
+	if (!driverInStore)
+	{
+		// Install the driver into the driver store
+		if (!DiInstallDriverW(NULL, fullInfPath, DIIRFLAG_FORCE_INF, &rebootRequired))
+		{
+			result = HRESULT_FROM_WIN32(GetLastError());
+			SetupDiDestroyDeviceInfoList(hDevInfo);
+			return result;
+		}
 	}
 
 	// Create the device info element
