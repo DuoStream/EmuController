@@ -50,34 +50,22 @@ This makes DuoController dramatically more accessible to:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Your Application                         │
-│                                                             │
-│  DuoController_Initialize()                                 │
-│  DuoController_CreateController(Ds4 | Xbox)                 │
-│  DuoController_SendReport() / DuoController_SendReportDs4() │
-│  DuoController_RemoveController()                           │
-│  DuoController_Uninitialize()                               │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-     ┌───────────────┴───────────────┐
-     ▼                               ▼
-┌─────────────────┐          ┌──────────────────┐
-│  DS4 Path       │          │  Xbox Path       │
-│                 │          │                  │
-│  Shared Mem     │          │ xboxgipsynthetic │
-│  ────────────── │          │ ──────────────── │
-│  DuoController  │          │ (System API)     │
-│  UMDF Driver    │          │                  │
-│  (HID Miniport) │          │                  │
-└──────┬──────────┘          └────────┬─────────┘
-       │                              │
-       ▼                              ▼
-┌──────────────────────────────────────────────┐
-│            Windows Game Input API            │
-│      (GameInput / XInput / DirectInput)      │
-└──────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    App["<b>Your Application</b><br/><br/><code>DuoController_Initialize()<br/><span style='white-space:nowrap;color:inherit'>DuoController_CreateController(Ds4|Xbox)</span><br/>DuoController_SendReport()<br/>DuoController_SendReportDs4()<br/>DuoController_RemoveController()<br/>DuoController_Uninitialize()</code>"]
+    DS4["<b>DS4 Path</b><br/><br/>Shared Memory<br/>DuoController UMDF Driver<br/>(HID Miniport)"]
+    Xbox["<b>Xbox Path</b><br/><br/>xboxgipsynthetic.dll<br/>(System API)"]
+    Input["<b>Windows Game Input API</b><br/><span style='white-space:nowrap;color:inherit'>(GameInput / XInput / DirectInput / RawInput)</span>"]
+
+    App --> DS4
+    App --> Xbox
+    DS4 --> Input
+    Xbox --> Input
+
+    style App fill:#1a1a2e,stroke:#e94560,stroke-width:2px,color:#fff
+    style DS4 fill:#16213e,stroke:#0f3460,stroke-width:2px,color:#fff
+    style Xbox fill:#16213e,stroke:#0f3460,stroke-width:2px,color:#fff
+    style Input fill:#1a1a2e,stroke:#e94560,stroke-width:2px,color:#fff
 ```
 
 ## API
