@@ -92,18 +92,18 @@ typedef struct _DUO_CONTROLLER
 	HDEVQUERY DeviceQuery;
 	DUO_CONTROLLER_INPUT_REPORT LastXboxInputReport;
 
-	// DS4-specific fields
-	WCHAR Ds4InstanceId[256];
-	HANDLE Ds4InputMapping;
-	HANDLE Ds4OutputMapping;
-	LPVOID Ds4InputView;
-	LPVOID Ds4OutputView;
-	HANDLE Ds4InputEvent;
-	HANDLE Ds4OutputEvent;
-	HANDLE Ds4FfbThread;
-	HANDLE Ds4FfbStopEvent;
-	CRITICAL_SECTION Ds4Cs;
-	DUO_CONTROLLER_INPUT_REPORT_DS4 LastDs4InputReport;
+	// DS-specific fields
+	WCHAR DsInstanceId[256];
+	HANDLE DsInputMapping;
+	HANDLE DsOutputMapping;
+	LPVOID DsInputView;
+	LPVOID DsOutputView;
+	HANDLE DsInputEvent;
+	HANDLE DsOutputEvent;
+	HANDLE DsFfbThread;
+	HANDLE DsFfbStopEvent;
+	CRITICAL_SECTION DsCs;
+	DUO_CONTROLLER_INPUT_REPORT_DS LastDsInputReport;
 } DUO_CONTROLLER;
 
 /// <summary>
@@ -506,7 +506,7 @@ static void CALLBACK DuoController_OutputReportReceived(void* controller, unsign
 /// </summary>
 /// <param name="error">The Win32 error code</param>
 /// <returns>The HRESULT</returns>
-static HRESULT Ds4Win32ErrorToHresult(DWORD error)
+static HRESULT DsWin32ErrorToHresult(DWORD error)
 {
 	switch (error)
 	{
@@ -606,11 +606,11 @@ static HRESULT InstallDuoControllerDevice(WCHAR* instanceId, DWORD instanceIdSiz
 	if (!IsProcessElevated())
 		return E_ACCESSDENIED;
 
-	// The hardware ID for the DS4 device (matches DuoController.inf)
-	const WCHAR* hardwareId = L"Root\\VID_054C&PID_05C4";
+	// The hardware ID for the DualSense device (matches DuoController.inf)
+	const WCHAR* hardwareId = L"Root\\VID_054C&PID_0DF2";
 
 	// The device ID seed
-	const WCHAR* deviceIdSeed = L"VID_054C&PID_05C4&DUOCONTROLLER";
+	const WCHAR* deviceIdSeed = L"VID_054C&PID_0DF2&DUOCONTROLLER";
 
 	// Get the full INF path
 	WCHAR fullInfPath[MAX_PATH];
@@ -794,15 +794,15 @@ static HRESULT RemoveDuoControllerDevice(const WCHAR* instanceId)
 }
 
 /// <summary>
-/// Opens the DS4 input shared memory region and event for the given device instance ID.
+/// Opens the DualSense input shared memory region and event for the given device instance ID.
 /// </summary>
 /// <param name="controller">The DuoController to connect</param>
 /// <returns>Result</returns>
-static HRESULT Ds4ConnectInput(DUO_CONTROLLER* controller)
+static HRESULT DsConnectInput(DUO_CONTROLLER* controller)
 {
 	// Build the shared memory names
 	WCHAR sanitized[256];
-	SanitizeInstanceIdForPipeName(controller->Ds4InstanceId, sanitized, ARRAYSIZE(sanitized));
+	SanitizeInstanceIdForPipeName(controller->DsInstanceId, sanitized, ARRAYSIZE(sanitized));
 
 	WCHAR mappingName[512];
 	swprintf_s(mappingName, ARRAYSIZE(mappingName), L"Global\\Duo_%s_input", sanitized);
@@ -825,7 +825,7 @@ static HRESULT Ds4ConnectInput(DUO_CONTROLLER* controller)
 	if (hMapping == NULL)
 	{
 		DWORD err = GetLastError();
-		return (err == ERROR_FILE_NOT_FOUND) ? HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) : Ds4Win32ErrorToHresult(err);
+		return (err == ERROR_FILE_NOT_FOUND) ? HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) : DsWin32ErrorToHresult(err);
 	}
 
 	// Map the input shared memory
@@ -833,7 +833,7 @@ static HRESULT Ds4ConnectInput(DUO_CONTROLLER* controller)
 	if (view == NULL)
 	{
 		CloseHandle(hMapping);
-		return Ds4Win32ErrorToHresult(GetLastError());
+		return DsWin32ErrorToHresult(GetLastError());
 	}
 
 	// Open the input event (need EVENT_MODIFY_STATE to SetEvent)
@@ -842,25 +842,25 @@ static HRESULT Ds4ConnectInput(DUO_CONTROLLER* controller)
 	{
 		UnmapViewOfFile(view);
 		CloseHandle(hMapping);
-		return Ds4Win32ErrorToHresult(GetLastError());
+		return DsWin32ErrorToHresult(GetLastError());
 	}
 
-	controller->Ds4InputMapping = hMapping;
-	controller->Ds4InputView = view;
-	controller->Ds4InputEvent = hEvent;
+	controller->DsInputMapping = hMapping;
+	controller->DsInputView = view;
+	controller->DsInputEvent = hEvent;
 	return S_OK;
 }
 
 /// <summary>
-/// The thread procedure that reads force feedback data from the DS4 output shared memory.
+/// The thread procedure that reads force feedback data from the DualSense output shared memory.
 /// </summary>
 /// <param name="param">The DUO_CONTROLLER pointer</param>
 /// <returns>Thread exit code</returns>
-static DWORD WINAPI Ds4FfbThreadProc(LPVOID param)
+static DWORD WINAPI DsFfbThreadProc(LPVOID param)
 {
 	DUO_CONTROLLER* controller = (DUO_CONTROLLER*)param;
 
-	HANDLE waitHandles[2] = { controller->Ds4FfbStopEvent, controller->Ds4OutputEvent };
+	HANDLE waitHandles[2] = { controller->DsFfbStopEvent, controller->DsOutputEvent };
 
 	while (1)
 	{
@@ -876,25 +876,25 @@ static DWORD WINAPI Ds4FfbThreadProc(LPVOID param)
 			// Output event was signaled — new FFB data available
 
 			// Read the output report from shared memory
-			BYTE* outputMem = (BYTE*)controller->Ds4OutputView;
+			BYTE* outputMem = (BYTE*)controller->DsOutputView;
 
-			// Decode the DS4 output report into a force feedback report
-			// DS4 output report: Byte 0 = ReportId (0x05), Byte 1 = flags,
-			// Byte 4 = Left motor, Byte 5 = Right motor
+			// Decode the DualSense output report into a force feedback report
+			// DualSense output report (Report ID 0x02): Byte 0 = ReportId,
+			// Byte 3 = RumbleEmulationRight, Byte 4 = RumbleEmulationLeft
 			DUO_CONTROLLER_FORCE_FEEDBACK_REPORT ffReport;
 			ZeroMemory(&ffReport, sizeof(ffReport));
 
 			ffReport.Flags = SYNTHETIC_CONTROLLER_OUTPUT_REPORT_FLAG_RIGHT_MOTOR_VALID |
 				SYNTHETIC_CONTROLLER_OUTPUT_REPORT_FLAG_LEFT_MOTOR_VALID;
+			ffReport.RightMotor = outputMem[3];
 			ffReport.LeftMotor = outputMem[4];
-			ffReport.RightMotor = outputMem[5];
 
 #pragma warning(suppress:4366)
-			EnterCriticalSection(&controller->Ds4Cs);
+			EnterCriticalSection(&controller->DsCs);
 			DuoController_VibrationReportCallback_t callback = controller->VibrationReportCallback;
 			void* context = controller->VibrationReportCallbackContext;
 #pragma warning(suppress:4366)
-			LeaveCriticalSection(&controller->Ds4Cs);
+			LeaveCriticalSection(&controller->DsCs);
 
 			if (callback != NULL)
 			{
@@ -907,15 +907,15 @@ static DWORD WINAPI Ds4FfbThreadProc(LPVOID param)
 }
 
 /// <summary>
-/// Opens the DS4 output (FFB) shared memory region and starts the FFB read thread.
+/// Opens the DualSense output (FFB) shared memory region and starts the FFB read thread.
 /// </summary>
 /// <param name="controller">The DuoController to connect</param>
 /// <returns>Result</returns>
-static HRESULT Ds4ConnectFfb(DUO_CONTROLLER* controller)
+static HRESULT DsConnectFfb(DUO_CONTROLLER* controller)
 {
 	// Build the shared memory names
 	WCHAR sanitized[256];
-	SanitizeInstanceIdForPipeName(controller->Ds4InstanceId, sanitized, ARRAYSIZE(sanitized));
+	SanitizeInstanceIdForPipeName(controller->DsInstanceId, sanitized, ARRAYSIZE(sanitized));
 
 	WCHAR mappingName[512];
 	swprintf_s(mappingName, ARRAYSIZE(mappingName), L"Global\\Duo_%s_output", sanitized);
@@ -938,7 +938,7 @@ static HRESULT Ds4ConnectFfb(DUO_CONTROLLER* controller)
 	if (hMapping == NULL)
 	{
 		DWORD err = GetLastError();
-		return (err == ERROR_FILE_NOT_FOUND) ? HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) : Ds4Win32ErrorToHresult(err);
+		return (err == ERROR_FILE_NOT_FOUND) ? HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) : DsWin32ErrorToHresult(err);
 	}
 
 	// Map the output shared memory
@@ -946,7 +946,7 @@ static HRESULT Ds4ConnectFfb(DUO_CONTROLLER* controller)
 	if (view == NULL)
 	{
 		CloseHandle(hMapping);
-		return Ds4Win32ErrorToHresult(GetLastError());
+		return DsWin32ErrorToHresult(GetLastError());
 	}
 
 	// Open the output event (need SYNCHRONIZE to WaitForSingleObject)
@@ -955,38 +955,38 @@ static HRESULT Ds4ConnectFfb(DUO_CONTROLLER* controller)
 	{
 		UnmapViewOfFile(view);
 		CloseHandle(hMapping);
-		return Ds4Win32ErrorToHresult(GetLastError());
+		return DsWin32ErrorToHresult(GetLastError());
 	}
 
-	controller->Ds4OutputMapping = hMapping;
-	controller->Ds4OutputView = view;
-	controller->Ds4OutputEvent = hEvent;
+	controller->DsOutputMapping = hMapping;
+	controller->DsOutputView = view;
+	controller->DsOutputEvent = hEvent;
 
 	// Create the stop event
-	controller->Ds4FfbStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-	if (!controller->Ds4FfbStopEvent)
+	controller->DsFfbStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (!controller->DsFfbStopEvent)
 	{
 		CloseHandle(hEvent);
 		UnmapViewOfFile(view);
 		CloseHandle(hMapping);
-		controller->Ds4OutputEvent = NULL;
-		controller->Ds4OutputView = NULL;
-		controller->Ds4OutputMapping = NULL;
+		controller->DsOutputEvent = NULL;
+		controller->DsOutputView = NULL;
+		controller->DsOutputMapping = NULL;
 		return HRESULT_FROM_WIN32(GetLastError());
 	}
 
 	// Create the FFB read thread
-	controller->Ds4FfbThread = CreateThread(NULL, 0, Ds4FfbThreadProc, controller, 0, NULL);
-	if (!controller->Ds4FfbThread)
+	controller->DsFfbThread = CreateThread(NULL, 0, DsFfbThreadProc, controller, 0, NULL);
+	if (!controller->DsFfbThread)
 	{
-		CloseHandle(controller->Ds4FfbStopEvent);
-		controller->Ds4FfbStopEvent = NULL;
+		CloseHandle(controller->DsFfbStopEvent);
+		controller->DsFfbStopEvent = NULL;
 		CloseHandle(hEvent);
-		controller->Ds4OutputEvent = NULL;
+		controller->DsOutputEvent = NULL;
 		UnmapViewOfFile(view);
-		controller->Ds4OutputView = NULL;
+		controller->DsOutputView = NULL;
 		CloseHandle(hMapping);
-		controller->Ds4OutputMapping = NULL;
+		controller->DsOutputMapping = NULL;
 		return HRESULT_FROM_WIN32(GetLastError());
 	}
 
@@ -994,164 +994,126 @@ static HRESULT Ds4ConnectFfb(DUO_CONTROLLER* controller)
 }
 
 /// <summary>
-/// Disconnects the DS4 input shared memory.
+/// Disconnects the DualSense input shared memory.
 /// </summary>
 /// <param name="controller">The DuoController</param>
-static void Ds4DisconnectInput(DUO_CONTROLLER* controller)
+static void DsDisconnectInput(DUO_CONTROLLER* controller)
 {
-	if (controller->Ds4InputEvent != NULL)
+	if (controller->DsInputEvent != NULL)
 	{
-		CloseHandle(controller->Ds4InputEvent);
-		controller->Ds4InputEvent = NULL;
+		CloseHandle(controller->DsInputEvent);
+		controller->DsInputEvent = NULL;
 	}
-	if (controller->Ds4InputView != NULL)
+	if (controller->DsInputView != NULL)
 	{
-		UnmapViewOfFile(controller->Ds4InputView);
-		controller->Ds4InputView = NULL;
+		UnmapViewOfFile(controller->DsInputView);
+		controller->DsInputView = NULL;
 	}
-	if (controller->Ds4InputMapping != NULL)
+	if (controller->DsInputMapping != NULL)
 	{
-		CloseHandle(controller->Ds4InputMapping);
-		controller->Ds4InputMapping = NULL;
+		CloseHandle(controller->DsInputMapping);
+		controller->DsInputMapping = NULL;
 	}
 }
 
 /// <summary>
-/// Disconnects the DS4 FFB shared memory and stops the FFB thread.
+/// Disconnects the DualSense FFB shared memory and stops the FFB thread.
 /// </summary>
 /// <param name="controller">The DuoController</param>
-static void Ds4DisconnectFfb(DUO_CONTROLLER* controller)
+static void DsDisconnectFfb(DUO_CONTROLLER* controller)
 {
 	// Signal the FFB thread to stop
-	if (controller->Ds4FfbStopEvent != NULL)
+	if (controller->DsFfbStopEvent != NULL)
 	{
-		SetEvent(controller->Ds4FfbStopEvent);
-		if (controller->Ds4FfbThread != NULL)
+		SetEvent(controller->DsFfbStopEvent);
+		if (controller->DsFfbThread != NULL)
 		{
-			WaitForSingleObject(controller->Ds4FfbThread, 1000);
-			CloseHandle(controller->Ds4FfbThread);
-			controller->Ds4FfbThread = NULL;
+			WaitForSingleObject(controller->DsFfbThread, 1000);
+			CloseHandle(controller->DsFfbThread);
+			controller->DsFfbThread = NULL;
 		}
-		CloseHandle(controller->Ds4FfbStopEvent);
-		controller->Ds4FfbStopEvent = NULL;
+		CloseHandle(controller->DsFfbStopEvent);
+		controller->DsFfbStopEvent = NULL;
 	}
 
 	// Close the output event
-	if (controller->Ds4OutputEvent != NULL)
+	if (controller->DsOutputEvent != NULL)
 	{
-		CloseHandle(controller->Ds4OutputEvent);
-		controller->Ds4OutputEvent = NULL;
+		CloseHandle(controller->DsOutputEvent);
+		controller->DsOutputEvent = NULL;
 	}
 
 	// Unmap the output view
-	if (controller->Ds4OutputView != NULL)
+	if (controller->DsOutputView != NULL)
 	{
-		UnmapViewOfFile(controller->Ds4OutputView);
-		controller->Ds4OutputView = NULL;
+		UnmapViewOfFile(controller->DsOutputView);
+		controller->DsOutputView = NULL;
 	}
 
 	// Close the output mapping
-	if (controller->Ds4OutputMapping != NULL)
+	if (controller->DsOutputMapping != NULL)
 	{
-		CloseHandle(controller->Ds4OutputMapping);
-		controller->Ds4OutputMapping = NULL;
+		CloseHandle(controller->DsOutputMapping);
+		controller->DsOutputMapping = NULL;
 	}
 }
 
 /// <summary>
-/// Serializes a DS4 input report into a raw HID report and sends it over the pipe.
+/// Serializes a DualSense input report into a raw HID report and sends it over the pipe.
 /// </summary>
 /// <param name="controller">The DuoController</param>
-/// <param name="state">The DS4 input state to send</param>
+/// <param name="state">The DualSense input state to send</param>
 /// <returns>Result</returns>
-static HRESULT Ds4SendRawInput(DUO_CONTROLLER* controller, const DUO_CONTROLLER_INPUT_REPORT_DS4* state)
+static HRESULT DsSendRawInput(DUO_CONTROLLER* controller, const DUO_CONTROLLER_INPUT_REPORT_DS* state)
 {
-	if (controller->Ds4InputView == NULL)
+	if (controller->DsInputView == NULL)
 	{
 		return HRESULT_FROM_WIN32(ERROR_PIPE_NOT_CONNECTED);
 	}
 
-	// Build the raw 64-byte DS4 HID report
-	BYTE report[DS4_REPORT_SIZE];
-	ZeroMemory(report, DS4_REPORT_SIZE);
+	// Build the raw 64-byte DualSense HID report (Report ID 0x01, USB)
+	// The struct matches the USBGetStateData wire format exactly, so we can
+	// memcpy it directly after the Report ID byte.
+	BYTE report[DS_REPORT_SIZE];
+	ZeroMemory(report, DS_REPORT_SIZE);
 
-	report[0] = DS4_INPUT_REPORT_ID;
-	report[1] = state->LeftStickX;
-	report[2] = state->LeftStickY;
-	report[3] = state->RightStickX;
-	report[4] = state->RightStickY;
+	report[0] = DS_INPUT_REPORT_ID;
 
-	report[5] = (state->Hat & 0x0F);
-	if (state->Square)   report[5] |= 0x10;
-	if (state->Cross)    report[5] |= 0x20;
-	if (state->Circle)   report[5] |= 0x40;
-	if (state->Triangle) report[5] |= 0x80;
+	// Copy the entire USBGetStateData struct (63 bytes) starting at byte 1
+	memcpy(&report[1], state, sizeof(DUO_CONTROLLER_INPUT_REPORT_DS));
 
-	if (state->L1)        report[6] |= 0x01;
-	if (state->R1)        report[6] |= 0x02;
-	if (state->L2)        report[6] |= 0x04;
-	if (state->R2)        report[6] |= 0x08;
-	if (state->Share)     report[6] |= 0x10;
-	if (state->Options)   report[6] |= 0x20;
-	if (state->L3)        report[6] |= 0x40;
-	if (state->R3)        report[6] |= 0x80;
-
-	if (state->PS)        report[7] |= 0x01;
-	if (state->Touchpad)  report[7] |= 0x02;
-
-	report[8] = state->LeftTrigger;
-	report[9] = state->RightTrigger;
-
-	report[12] = 0xFF; // Full battery
-
-	memcpy(&report[13], &state->GyroX, sizeof(INT16));
-	memcpy(&report[15], &state->GyroY, sizeof(INT16));
-	memcpy(&report[17], &state->GyroZ, sizeof(INT16));
-	memcpy(&report[19], &state->AccelX, sizeof(INT16));
-	memcpy(&report[21], &state->AccelY, sizeof(INT16));
-	memcpy(&report[23], &state->AccelZ, sizeof(INT16));
-
-	report[30] = 0x1A; // Wired - Full battery
-
-	report[35] = state->Touch1Active ? 0 : 0xFF;
-
-	USHORT t1x = min(state->Touch1X, DS4_TOUCHPAD_MAX_X) & 0xFFF;
-	USHORT t1y = min(state->Touch1Y, DS4_TOUCHPAD_MAX_Y) & 0xFFF;
-	UINT t1 = ((UINT)t1y << 12) | t1x;
-	report[36] = (BYTE)(t1 & 0xFF);
-	report[37] = (BYTE)((t1 >> 8) & 0xFF);
-	report[38] = (BYTE)((t1 >> 16) & 0xFF);
-
-	report[39] = state->Touch2Active ? 1 : 0xFF;
-
-	USHORT t2x = min(state->Touch2X, DS4_TOUCHPAD_MAX_X) & 0xFFF;
-	USHORT t2y = min(state->Touch2Y, DS4_TOUCHPAD_MAX_Y) & 0xFFF;
-	UINT t2 = ((UINT)t2y << 12) | t2x;
-	report[40] = (BYTE)(t2 & 0xFF);
-	report[41] = (BYTE)((t2 >> 8) & 0xFF);
-	report[42] = (BYTE)((t2 >> 16) & 0xFF);
+	// Override reserved/unused battery-status fields with defaults if zeroed
+	// so the host sees a connected, powered controller even without explicit setup.
+	if (state->PowerPercent == 0 && state->PowerState == 0)
+	{
+		report[53] = (0x00 << 4) | 0x0A; // Discharging, 100%
+	}
+	if (state->PluggedUsbData == 0 && state->PluggedUsbPower == 0)
+	{
+		report[54] = 0x18; // USB data + power connected
+	}
 
 	// Write the message header + report to shared memory
-	BYTE* inputMem = (BYTE*)controller->Ds4InputView;
-	inputMem[0] = DS4_INPUT_REPORT_FULL;
-	inputMem[1] = DS4_REPORT_SIZE;
-	memcpy(&inputMem[MESSAGE_HEADER_LEN], report, DS4_REPORT_SIZE);
+	BYTE* inputMem = (BYTE*)controller->DsInputView;
+	inputMem[0] = DS_INPUT_REPORT_FULL;
+	inputMem[1] = DS_REPORT_SIZE;
+	memcpy(&inputMem[MESSAGE_HEADER_LEN], report, DS_REPORT_SIZE);
 
 	// Signal the input event
-	if (!SetEvent(controller->Ds4InputEvent))
+	if (!SetEvent(controller->DsInputEvent))
 	{
-		return Ds4Win32ErrorToHresult(GetLastError());
+		return DsWin32ErrorToHresult(GetLastError());
 	}
 
 	return S_OK;
 }
 
 /// <summary>
-/// Creates a new DS4 controller by installing a new DuoController device and connecting to it.
+/// Creates a new DualSense controller by installing a new DuoController device and connecting to it.
 /// </summary>
-/// <param name="controller">The DuoController to initialize as DS4</param>
+/// <param name="controller">The DuoController to initialize as DualSense</param>
 /// <returns>Result</returns>
-static HRESULT CreateDs4Controller(DUO_CONTROLLER* controller)
+static HRESULT CreateDsController(DUO_CONTROLLER* controller)
 {
 	// Install a new DuoController device
 	WCHAR instanceId[256];
@@ -1162,36 +1124,36 @@ static HRESULT CreateDs4Controller(DUO_CONTROLLER* controller)
 	}
 
 	// Store the instance ID
-	wcscpy_s(controller->Ds4InstanceId, ARRAYSIZE(controller->Ds4InstanceId), instanceId);
+	wcscpy_s(controller->DsInstanceId, ARRAYSIZE(controller->DsInstanceId), instanceId);
 
-	// Initialize DS4-specific state
-	controller->Ds4InputMapping = NULL;
-	controller->Ds4OutputMapping = NULL;
-	controller->Ds4InputView = NULL;
-	controller->Ds4OutputView = NULL;
-	controller->Ds4InputEvent = NULL;
-	controller->Ds4OutputEvent = NULL;
-	controller->Ds4FfbThread = NULL;
-	controller->Ds4FfbStopEvent = NULL;
+	// Initialize DualSense-specific state
+	controller->DsInputMapping = NULL;
+	controller->DsOutputMapping = NULL;
+	controller->DsInputView = NULL;
+	controller->DsOutputView = NULL;
+	controller->DsInputEvent = NULL;
+	controller->DsOutputEvent = NULL;
+	controller->DsFfbThread = NULL;
+	controller->DsFfbStopEvent = NULL;
 #pragma warning(suppress:4366)
-	InitializeCriticalSection(&controller->Ds4Cs);
+	InitializeCriticalSection(&controller->DsCs);
 
 	// Connect to the input shared memory
-	result = Ds4ConnectInput(controller);
+	result = DsConnectInput(controller);
 	if (FAILED(result))
 	{
 #pragma warning(suppress:4366)
-		DeleteCriticalSection(&controller->Ds4Cs);
+		DeleteCriticalSection(&controller->DsCs);
 		return result;
 	}
 
 	// Connect to the FFB output shared memory
-	result = Ds4ConnectFfb(controller);
+	result = DsConnectFfb(controller);
 	if (FAILED(result))
 	{
-		Ds4DisconnectInput(controller);
+		DsDisconnectInput(controller);
 #pragma warning(suppress:4366)
-		DeleteCriticalSection(&controller->Ds4Cs);
+		DeleteCriticalSection(&controller->DsCs);
 		return result;
 	}
 
@@ -1199,43 +1161,43 @@ static HRESULT CreateDs4Controller(DUO_CONTROLLER* controller)
 }
 
 /// <summary>
-/// Removes a DS4 controller by disconnecting shared memory and removing the device.
+/// Removes a DualSense controller by disconnecting shared memory and removing the device.
 /// </summary>
 /// <param name="controller">The DuoController to clean up</param>
 /// <returns>Result</returns>
-static HRESULT RemoveDs4Controller(DUO_CONTROLLER* controller)
+static HRESULT RemoveDsController(DUO_CONTROLLER* controller)
 {
 	// Stop the FFB thread and close the output pipe
-	Ds4DisconnectFfb(controller);
+	DsDisconnectFfb(controller);
 
 	// Close the input pipe
-	Ds4DisconnectInput(controller);
+	DsDisconnectInput(controller);
 
 	// Delete the critical section
 #pragma warning(suppress:4366)
-	DeleteCriticalSection(&controller->Ds4Cs);
+	DeleteCriticalSection(&controller->DsCs);
 
 	// Remove the DuoController device from the system
-	return RemoveDuoControllerDevice(controller->Ds4InstanceId);
+	return RemoveDuoControllerDevice(controller->DsInstanceId);
 }
 
 /// <summary>
-/// Sends a DS4 input report.
+/// Sends a DualSense input report.
 /// </summary>
 /// <param name="controller">The DuoController</param>
-/// <param name="inputReport">The DS4 input report</param>
+/// <param name="inputReport">The DualSense input report</param>
 /// <returns>Result</returns>
-static HRESULT SendDs4Report(DUO_CONTROLLER* controller, DUO_CONTROLLER_INPUT_REPORT_DS4* inputReport)
+static HRESULT SendDsReport(DUO_CONTROLLER* controller, DUO_CONTROLLER_INPUT_REPORT_DS* inputReport)
 {
 #pragma warning(suppress:4366)
-	EnterCriticalSection(&controller->Ds4Cs);
-	HRESULT result = Ds4SendRawInput(controller, inputReport);
+	EnterCriticalSection(&controller->DsCs);
+	HRESULT result = DsSendRawInput(controller, inputReport);
 	if (SUCCEEDED(result))
 	{
-		controller->LastDs4InputReport = *inputReport;
+		controller->LastDsInputReport = *inputReport;
 	}
 #pragma warning(suppress:4366)
-	LeaveCriticalSection(&controller->Ds4Cs);
+	LeaveCriticalSection(&controller->DsCs);
 	return result;
 }
 
@@ -1577,12 +1539,12 @@ HRESULT WINAPI DuoController_CreateController(DUO_CONTROLLER_TYPE controllerType
 						}
 					}
 				}
-				else if (controllerType == DuoControllerTypeDs4)
+				else if (controllerType == DuoControllerTypeDs)
 				{
-					// Create the DS4 controller
-					result = CreateDs4Controller(newController);
+					// Create the DualSense controller
+					result = CreateDsController(newController);
 
-					// We created the DS4 controller successfully
+					// We created the DualSense controller successfully
 					if (SUCCEEDED(result))
 					{
 						// Extend the controllers array
@@ -1604,8 +1566,8 @@ HRESULT WINAPI DuoController_CreateController(DUO_CONTROLLER_TYPE controllerType
 						// We failed to extend the controllers array
 						else
 						{
-							// Clean up the DS4 controller
-							RemoveDs4Controller(newController);
+							// Clean up the DualSense controller
+							RemoveDsController(newController);
 
 							// Set the result
 							result = E_OUTOFMEMORY;
@@ -1731,10 +1693,10 @@ HRESULT WINAPI DuoController_RemoveController(void* controller)
 					// Remove the controller
 					SyntheticController_RemoveController(duoController->SyntheticHandle);
 				}
-				else if (duoController->Type == DuoControllerTypeDs4)
+				else if (duoController->Type == DuoControllerTypeDs)
 				{
-					// Clean up the DS4 controller
-					RemoveDs4Controller(duoController);
+					// Clean up the DualSense controller
+					RemoveDsController(duoController);
 				}
 
 				// Free the controller structure
@@ -1833,12 +1795,12 @@ HRESULT WINAPI DuoController_SendReport(void* controller, DUO_CONTROLLER_INPUT_R
 }
 
 /// <summary>
-/// Sends a DualShock 4 input report to the given Duo controller.
+/// Sends a DualSense input report to the given Duo controller.
 /// </summary>
 /// <param name="controller">The controller to send the input report to</param>
-/// <param name="inputReport">The DS4 input report to send</param>
+/// <param name="inputReport">The DualSense input report to send</param>
 /// <returns>Result</returns>
-HRESULT WINAPI DuoController_SendReportDs4(void* controller, DUO_CONTROLLER_INPUT_REPORT_DS4* inputReport)
+HRESULT WINAPI DuoController_SendReportDs(void* controller, DUO_CONTROLLER_INPUT_REPORT_DS* inputReport)
 {
 	// The result
 	HRESULT result = S_OK;
@@ -1852,11 +1814,11 @@ HRESULT WINAPI DuoController_SendReportDs4(void* controller, DUO_CONTROLLER_INPU
 			// Cast the controller
 			DUO_CONTROLLER* duoController = (DUO_CONTROLLER*)controller;
 
-			// Only DS4 controllers are supported by this function
-			if (duoController->Type == DuoControllerTypeDs4)
+			// Only DualSense controllers are supported by this function
+			if (duoController->Type == DuoControllerTypeDs)
 			{
-				// Send the DS4 input report
-				result = SendDs4Report(duoController, inputReport);
+				// Send the DualSense input report
+				result = SendDsReport(duoController, inputReport);
 			}
 
 			// Wrong report type for this controller
