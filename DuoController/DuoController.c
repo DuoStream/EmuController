@@ -629,6 +629,19 @@ static HRESULT InstallDuoControllerDevice(WCHAR* instanceId, DWORD instanceIdSiz
 	if (hDevInfo == INVALID_HANDLE_VALUE)
 		return HRESULT_FROM_WIN32(GetLastError());
 
+	// Whether a reboot is required or not
+	BOOL rebootRequired = FALSE;
+
+	// TODO: Check if the driver is already installed and skip installation if it is
+
+	// Install the driver into the driver store
+	if (!DiInstallDriverW(NULL, fullInfPath, DIIRFLAG_FORCE_INF, &rebootRequired))
+	{
+		result = HRESULT_FROM_WIN32(GetLastError());
+		SetupDiDestroyDeviceInfoList(hDevInfo);
+		return result;
+	}
+
 	// Create the device info element
 	SP_DEVINFO_DATA devInfoData;
 	ZeroMemory(&devInfoData, sizeof(devInfoData));
@@ -677,9 +690,8 @@ static HRESULT InstallDuoControllerDevice(WCHAR* instanceId, DWORD instanceIdSiz
 		// Write the session ID to the registry so that the driver can read it when it starts
 		RegSetValueExW(duoRegistryKey, valueName, 0, REG_DWORD, (const BYTE*)&SessionId, sizeof(SessionId));
 
-		// Install/update the driver for the device
-		BOOL rebootRequired = FALSE;
-		if (!UpdateDriverForPlugAndPlayDevicesW(NULL, hardwareId, fullInfPath, 0, &rebootRequired))
+		// Link the the driver to the device
+		if (!DiInstallDevice(NULL, hDevInfo, &devInfoData, NULL, DIIDFLAG_INSTALLCOPYINFDRIVERS, &rebootRequired))
 		{
 			result = HRESULT_FROM_WIN32(GetLastError());
 			SetupDiDestroyDeviceInfoList(hDevInfo);
