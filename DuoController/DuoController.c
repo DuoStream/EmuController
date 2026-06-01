@@ -747,11 +747,17 @@ static HRESULT RemoveDuoControllerDevice(const WCHAR* instanceId)
 				break;
 			}
 
-			// Remove the device
+			// Remove the device (this should cascade to HID child devices)
 			if (!SetupDiCallClassInstaller(DIF_REMOVE, hDevInfo, &devInfoData))
 			{
-				result = HRESULT_FROM_WIN32(GetLastError());
-				break;
+				// DIF_REMOVE failed, try SetupDiRemoveDevice directly as a fallback.
+				// This ensures the device node and its HID children are removed
+				// even if the class installer rejects the DIF_REMOVE request.
+				if (!SetupDiRemoveDevice(hDevInfo, &devInfoData))
+				{
+					result = HRESULT_FROM_WIN32(GetLastError());
+					break;
+				}
 			}
 
 			result = S_OK;
@@ -1174,7 +1180,8 @@ static HRESULT CreateDs4Controller(DUO_CONTROLLER* controller)
 /// Removes a DS4 controller by disconnecting shared memory and removing the device.
 /// </summary>
 /// <param name="controller">The DuoController to clean up</param>
-static void RemoveDs4Controller(DUO_CONTROLLER* controller)
+/// <returns>Result</returns>
+static HRESULT RemoveDs4Controller(DUO_CONTROLLER* controller)
 {
 	// Stop the FFB thread and close the output pipe
 	Ds4DisconnectFfb(controller);
@@ -1187,7 +1194,7 @@ static void RemoveDs4Controller(DUO_CONTROLLER* controller)
 	DeleteCriticalSection(&controller->Ds4Cs);
 
 	// Remove the DuoController device from the system
-	RemoveDuoControllerDevice(controller->Ds4InstanceId);
+	return RemoveDuoControllerDevice(controller->Ds4InstanceId);
 }
 
 /// <summary>
@@ -1339,7 +1346,7 @@ HRESULT WINAPI DuoController_Uninitialize()
 		while (Controllers != NULL)
 		{
 			// Remove the controller
-			DuoController_RemoveController(&Controllers[0]);
+			DuoController_RemoveController(Controllers[0]);
 		}
 
 		// Get the xboxgipsynthetic.dll module handle (without incrementing its load counter)
